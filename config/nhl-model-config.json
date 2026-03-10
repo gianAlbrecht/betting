@@ -1,0 +1,15 @@
+{
+  "home_ice_advantage": 0.09387274377732761,
+  "form_weight": 0.14514958929951988,
+  "points_weight": 0.10948276171126241,
+  "special_teams_weight": 0.2138280102224963,
+  "special_teams_max_adjustment": 0.18,
+  "goalie_weight": 0.1855163996488952,
+  "goalie_max_adjustment": 0.2,
+  "injury_malus": 0.06689005881940449,
+  "h2h_weight": 0.08593391157730687,
+  "h2h_max_adjustment": 0.2,
+  "back_to_back_penalty": 0.12755731875330867,
+  "min_expected_goals": 1.1,
+  "max_expected_goals": 5.8
+}

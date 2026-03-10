@@ -1,0 +1,35 @@
+# ─── Elixir / Mix ────────────────────────────────────────
+/_build/
+/deps/
+*.ez
+
+# Ignore umbrella children's build artifacts (built at root level)
+apps/*/_build
+apps/*/deps
+
+# Phoenix assets
+/apps/betting_web/priv/static/assets/
+
+# Release artifacts
+/rel/
+
+# Mix test coverage
+/cover/
+
+# Elixir editor files
+.elixir_ls/
+.lexical/
+
+# Env / secrets
+.env
+.env.local
+
+# direnv — commit .envrc but not the loaded state
+.direnv/
+
+# macOS
+.DS_Store
+*.pem
+
+CLAUDE.md
+
