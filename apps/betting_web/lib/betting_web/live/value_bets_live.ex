@@ -11,19 +11,21 @@ defmodule BettingWeb.ValueBetsLive do
       Phoenix.PubSub.subscribe(BettingEngine.PubSub, "sync:status")
     end
 
-    fixtures = ValueBets.find_value_bets()
+    fixtures = ValueBets.find_value_bets() |> sorted(true)
 
     {:ok,
      assign(socket,
        fixtures: fixtures,
        total_value_bets: count_value_bets(fixtures),
-       saved: MapSet.new()
+       saved: MapSet.new(),
+       sort_desc: true,
+       collapsed_leagues: MapSet.new()
      )}
   end
 
   @impl true
   def handle_info({:sync_complete, _}, socket) do
-    fixtures = ValueBets.find_value_bets()
+    fixtures = ValueBets.find_value_bets() |> sorted(socket.assigns.sort_desc)
     {:noreply, assign(socket, fixtures: fixtures, total_value_bets: count_value_bets(fixtures))}
   end
 
@@ -32,6 +34,25 @@ defmodule BettingWeb.ValueBetsLive do
 
   @impl true
   def handle_info({:sync_error, _}, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("toggle_league", %{"league" => league}, socket) do
+    collapsed =
+      if MapSet.member?(socket.assigns.collapsed_leagues, league) do
+        MapSet.delete(socket.assigns.collapsed_leagues, league)
+      else
+        MapSet.put(socket.assigns.collapsed_leagues, league)
+      end
+
+    {:noreply, assign(socket, collapsed_leagues: collapsed)}
+  end
+
+  @impl true
+  def handle_event("toggle_sort", _, socket) do
+    sort_desc = !socket.assigns.sort_desc
+    fixtures = sorted(socket.assigns.fixtures, sort_desc)
+    {:noreply, assign(socket, sort_desc: sort_desc, fixtures: fixtures)}
+  end
 
   @impl true
   def handle_event("save_bet", params, socket) do
@@ -70,13 +91,31 @@ defmodule BettingWeb.ValueBetsLive do
         </p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <span><span class="font-semibold text-foreground"><%= length(@fixtures) %></span> Spiele</span>
-        <span>·</span>
-        <span><span class="font-semibold text-foreground"><%= @total_value_bets %></span> Value Bet Opportunities</span>
-        <%= if @total_value_bets > 0 do %>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span><span class="font-semibold text-foreground"><%= length(@fixtures) %></span> Spiele</span>
           <span>·</span>
-          <.badge variant="success"><%= @total_value_bets %> Value Bets gefunden</.badge>
+          <span><span class="font-semibold text-foreground"><%= @total_value_bets %></span> Value Bet Opportunities</span>
+          <%= if @total_value_bets > 0 do %>
+            <span>·</span>
+            <.badge variant="success"><%= @total_value_bets %> Value Bets gefunden</.badge>
+          <% end %>
+        </div>
+
+        <%= if length(@fixtures) > 1 do %>
+          <button
+            phx-click="toggle_sort"
+            class="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <%= if @sort_desc do %>
+                <path d="M3 4h13"/><path d="M3 8h9"/><path d="M3 12h5"/><path d="m15 8 3 3 3-3"/><path d="M18 11V21"/>
+              <% else %>
+                <path d="M3 4h13"/><path d="M3 8h9"/><path d="M3 12h5"/><path d="m15 16 3-3 3 3"/><path d="M18 13V3"/>
+              <% end %>
+            </svg>
+            Value %: <%= if @sort_desc, do: "Höchster zuerst", else: "Niedrigster zuerst" %>
+          </button>
         <% end %>
       </div>
 
@@ -91,19 +130,40 @@ defmodule BettingWeb.ValueBetsLive do
           <p class="mt-1 text-sm">Synchronisiere zuerst Daten über das Dashboard.</p>
         </div>
       <% else %>
-        <div class="space-y-6">
+        <div class="space-y-4">
           <%= for {league, matches} <- group_by_league(@fixtures) do %>
-            <div>
-              <h3 class="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                <span><%= sport_emoji(hd(matches).sport_slug) %></span>
-                <span><%= league %></span>
-                <span class="text-xs font-normal">(<%= length(matches) %>)</span>
-              </h3>
-              <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <%= for fixture <- matches do %>
-                  <.fixture_card fixture={fixture} saved={MapSet.member?(@saved, fixture.fixture_id)} />
-                <% end %>
-              </div>
+            <% collapsed = MapSet.member?(@collapsed_leagues, league) %>
+            <div class="rounded-xl border bg-card overflow-hidden">
+              <button
+                phx-click="toggle_league"
+                phx-value-league={league}
+                class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/40"
+              >
+                <div class="flex items-center gap-2">
+                  <span><%= sport_emoji(hd(matches).sport_slug) %></span>
+                  <span class="text-sm font-semibold"><%= league %></span>
+                  <span class="text-xs text-muted-foreground">(<%= length(matches) %>)</span>
+                </div>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class={"h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 #{if collapsed, do: "-rotate-90", else: ""}"}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <%= unless collapsed do %>
+                <div class="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <%= for fixture <- matches do %>
+                    <.fixture_card fixture={fixture} saved={MapSet.member?(@saved, fixture.fixture_id)} />
+                  <% end %>
+                </div>
+              <% end %>
             </div>
           <% end %>
         </div>
@@ -196,4 +256,18 @@ defmodule BettingWeb.ValueBetsLive do
 
   defp sport_emoji("icehockey"), do: "🏒"
   defp sport_emoji(_), do: "⚽"
+
+  defp sorted(fixtures, true) do
+    Enum.sort_by(fixtures, &max_value/1, :desc)
+  end
+
+  defp sorted(fixtures, false) do
+    Enum.sort_by(fixtures, &max_value/1, :asc)
+  end
+
+  defp max_value(%{value_outcomes: []}), do: 0.0
+
+  defp max_value(%{value_outcomes: outcomes}) do
+    outcomes |> Enum.map(& &1.value) |> Enum.max()
+  end
 end

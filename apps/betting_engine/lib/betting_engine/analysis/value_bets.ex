@@ -1,15 +1,21 @@
 defmodule BettingEngine.Analysis.ValueBets do
   @moduledoc """
-  Identifies value bets based on market efficiency.
+  Finds value bets by comparing bookmaker odds against a de-vigged consensus
+  probability derived from the broader market.
 
-  A value bet exists when a bookmaker's implied probability is LOWER than
-  the "true" probability estimated from the market consensus (average implied prob
-  across all bookmakers, de-vigged).
+  Algorithm per outcome label (e.g. "Arsenal", "Draw", "Chelsea"):
+    1. Collect all h2h odds for that label across every bookmaker in the DB.
+    2. Average their raw implied probabilities (1/odd). This strips the
+       bookmaker margin (vig) via simple averaging — the market consensus.
+    3. Calculate edge: edge = consensus_probability × best_available_odd − 1
+    4. Surface outcomes where edge ≥ @min_value_threshold (5%).
 
-  value = (true_probability * odd) - 1
-  A positive value means the bet has positive expected value (+EV).
+  Why require @min_bookmakers (2)?
+  A single bookmaker's odds cannot be verified against a consensus — you need
+  at least two independent quotes to compute a meaningful average. Fixtures
+  with only one bookmaker quoting an outcome are silently skipped.
 
-  Threshold: only bets with value > 0.05 (5% edge) are surfaced.
+  This module is a pure read-only function; it never writes to the database.
   """
 
   alias BettingEngine.Repo
@@ -47,8 +53,6 @@ defmodule BettingEngine.Analysis.ValueBets do
     |> Enum.filter(&(length(&1.value_outcomes) > 0))
   end
 
-  # ─── Private ─────────────────────────────────────────────
-
   defp load_upcoming_fixtures_with_odds do
     now = DateTime.utc_now()
 
@@ -72,10 +76,8 @@ defmodule BettingEngine.Analysis.ValueBets do
   end
 
   defp analyze_fixture(fixture) do
-    # Group odds by outcome label
     by_label = Enum.group_by(fixture.odds, & &1.label)
 
-    # Need at least @min_bookmakers per outcome for a meaningful consensus
     value_outcomes =
       by_label
       |> Enum.filter(fn {_, odds} -> length(odds) >= @min_bookmakers end)
@@ -93,16 +95,14 @@ defmodule BettingEngine.Analysis.ValueBets do
   end
 
   defp find_value_for_outcome(label, odds) do
-    # Implied probability per bookmaker for this outcome
+    # Compute the implied probability for each bookmaker's quote (1/odd),
+    # then average them. This is the de-vigged consensus probability — the
+    # market's best estimate of the true chance of this outcome occurring.
     raw_probabilities = Enum.map(odds, fn o -> 1 / o.value end)
     total_implied = Enum.sum(raw_probabilities)
 
-    # Market consensus: simple average of implied probabilities across bookmakers.
-    # This approximates the "true" probability by averaging out individual bookmaker bias.
-    # Note: this includes residual vig; a full de-vig requires all outcomes per bookmaker.
     true_probability = total_implied / length(odds)
 
-    # Find bookmaker with the highest odds (best overlay)
     best = Enum.max_by(odds, & &1.value)
     value = true_probability * best.value - 1
 
@@ -112,7 +112,7 @@ defmodule BettingEngine.Analysis.ValueBets do
           label: label,
           bookmaker: best.bookmaker_name,
           odd: Float.round(best.value, 2),
-          implied_probability: Float.round((1 / best.value) * 100, 2),
+          implied_probability: Float.round(1 / best.value * 100, 2),
           true_probability: Float.round(true_probability * 100, 2),
           value: Float.round(value * 100, 2)
         }

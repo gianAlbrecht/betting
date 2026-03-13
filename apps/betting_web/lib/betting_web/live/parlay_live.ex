@@ -36,6 +36,9 @@ defmodule BettingWeb.ParlayLive do
     parsed = parse_params(params)
     lv = self()
 
+    # Parlay generation can evaluate up to 10,000 combinations. Running it in a
+    # supervised task keeps the LiveView process responsive (no blocked render)
+    # and shows a loading spinner while the work happens in the background.
     Task.Supervisor.start_child(BettingEngine.TaskSupervisor, fn ->
       parlays = Parlay.generate(parsed)
       send(lv, {:parlays_ready, parlays})
@@ -275,7 +278,8 @@ defmodule BettingWeb.ParlayLive do
 
   defp pick_label("Draw"), do: "X"
   defp pick_label(team_name) when is_binary(team_name) do
-    # Picks are team names; we can't always distinguish home/away from name alone
+    # Picks are stored as team names (the raw label from The Odds API). There is
+    # no separate "1" / "2" label — the team name IS the pick label for h2h bets.
     team_name
   end
 

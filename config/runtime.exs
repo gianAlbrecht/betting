@@ -31,6 +31,9 @@ if config_env() == :prod do
 end
 
 if config_env() != :test do
-  config :betting_engine, :odds_api_key,
-    System.fetch_env!("THE_ODDS_API_KEY")
+  config :betting_engine, :odds_api_key, System.fetch_env!("THE_ODDS_API_KEY")
+
+  if key = System.get_env("API_SPORTS_KEY") do
+    config :betting_engine, :sports_api_key, key
+  end
 end

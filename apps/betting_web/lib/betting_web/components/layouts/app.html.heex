@@ -1,36 +1,151 @@
 <div class="flex min-h-screen">
+  <%!-- Mobile backdrop --%>
+  <div
+    id="sidebar-backdrop"
+    class="fixed inset-0 z-20 hidden bg-black/60 backdrop-blur-sm lg:hidden"
+    onclick="sidebarClose()"
+  >
+  </div>
+
   <%!-- Sidebar --%>
-  <aside class="w-56 shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar">
-    <%!-- Header --%>
-    <div class="flex items-center gap-2 border-b border-sidebar-border px-6 py-4">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sidebar-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <aside
+    id="sidebar"
+    class="border-r border-sidebar-border bg-sidebar"
+  >
+    <%!-- Sidebar header --%>
+    <div class="flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-3">
+      <%!-- Logo icon — always visible --%>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-5 w-5 shrink-0 text-sidebar-primary"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" />
       </svg>
-      <span class="text-base font-bold tracking-tight text-sidebar-foreground">BetAnalyzer</span>
+      <%!-- Logo text — hides when collapsed --%>
+      <span class="nav-label flex-1 text-sm font-bold tracking-tight text-sidebar-foreground whitespace-nowrap overflow-hidden">
+        BetAnalyzer
+      </span>
+      <%!-- Mobile close button --%>
+      <button
+        onclick="sidebarClose()"
+        class="ml-auto rounded-md p-1 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground lg:hidden"
+        aria-label="Sidebar schließen"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+        </svg>
+      </button>
     </div>
 
     <%!-- Navigation --%>
-    <nav class="flex-1 space-y-1 px-3 py-4">
-      <p class="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Navigation</p>
+    <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
+      <p class="nav-label mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Navigation
+      </p>
       <.nav_link href={~p"/"} label="Dashboard" icon="dashboard" />
       <.nav_link href={~p"/arbitrage"} label="Arbitrage" icon="scale" />
       <.nav_link href={~p"/value-bets"} label="Value Bets" icon="gem" />
-      <.nav_link href={~p"/parlay-generator"} label="Parlay Generator" icon="combine" />
+      <.nav_link href={~p"/parlay-generator"} label="Parlay" icon="combine" />
       <.nav_link href={~p"/portfolio"} label="Portfolio" icon="wallet" />
     </nav>
 
+    <%!-- Desktop collapse toggle --%>
+    <button
+      onclick="sidebarToggle()"
+      class="hidden items-center justify-center border-t border-sidebar-border py-3 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground lg:flex"
+      title="Sidebar ein-/ausklappen"
+    >
+      <svg
+        id="sidebar-chevron"
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4 transition-transform duration-200"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="m15 18-6-6 6-6" />
+      </svg>
+    </button>
+
     <%!-- Footer --%>
-    <div class="border-t border-sidebar-border px-6 py-3">
-      <p class="text-[10px] text-muted-foreground">Daten via The Odds API</p>
+    <div class="nav-label border-t border-sidebar-border px-4 py-3">
+      <p class="text-[10px] text-muted-foreground">via The Odds API</p>
     </div>
   </aside>
 
   <%!-- Main content --%>
   <div class="flex min-w-0 flex-1 flex-col">
-    <header class="flex h-14 shrink-0 items-center gap-2 border-b px-6">
-      <span class="text-sm font-medium text-muted-foreground">BetAnalyzer</span>
+    <header class="flex h-14 shrink-0 items-center gap-3 border-b bg-background px-4">
+      <%!-- Mobile hamburger --%>
+      <button
+        onclick="sidebarOpen()"
+        class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+        aria-label="Menü öffnen"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="12" y2="12" /><line
+            x1="4"
+            x2="20"
+            y1="18"
+            y2="18"
+          />
+        </svg>
+      </button>
+      <%!-- Desktop sidebar toggle --%>
+      <button
+        onclick="sidebarToggle()"
+        class="hidden rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex"
+        title="Sidebar ein-/ausklappen"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="12" y2="12" /><line
+            x1="4"
+            x2="20"
+            y1="18"
+            y2="18"
+          />
+        </svg>
+      </button>
+      <span class="text-sm font-semibold text-foreground">BetAnalyzer</span>
     </header>
-    <main class="flex-1 overflow-auto p-6">
+
+    <main class="flex-1 overflow-auto p-4 lg:p-6">
       <.flash_group flash={@flash} />
       <%= @inner_content %>
     </main>

@@ -1,15 +1,22 @@
 defmodule BettingEngine.Analysis.Parlay do
   @moduledoc """
-  Generates optimal parlay combinations from upcoming fixtures.
+  Generates multi-leg parlay (accumulator) combinations from upcoming fixtures.
 
-  Params: legs, min_total_odds, max_total_odds, max_single_odd
-  Ranks by implied probability descending. Caps at 10k combinations checked.
+  Given user constraints — number of legs, combined odds range, and a max single
+  odd — it searches all combinations of fixture picks and returns the top results
+  sorted by implied probability (highest = most likely to win).
 
-  Risk levels (based on implied probability):
-    - low:      > 55%
-    - moderate: > 30%
-    - high:     > 10%
-    - extreme:  ≤ 10%
+  Combinatorial safety caps:
+    @max_combinations (10,000) — how many raw combos the stream evaluates before
+      stopping. Prevents the generator from running for seconds on large pools.
+    @max_valid (50) — combos that pass the odds-range filter; only these get the
+      more expensive parlay struct built for them.
+    @max_results (10) — what the user actually sees after sorting by probability.
+
+  The recursive combinations/2 function is a standard "choose k from n" and is
+  the hot path. The Stream.take cap keeps it bounded even for large n.
+
+  This module is a pure read-only function; it never writes to the database.
   """
 
   alias BettingEngine.Repo
@@ -67,8 +74,6 @@ defmodule BettingEngine.Analysis.Parlay do
     end
   end
 
-  # ─── Private ─────────────────────────────────────────────
-
   defp load_fixtures_with_best_odds(max_single_odd) do
     now = DateTime.utc_now()
 
@@ -117,6 +122,10 @@ defmodule BettingEngine.Analysis.Parlay do
   end
 
   defp pick_combinations(fixtures, legs) do
+    # Flatten fixtures × picks into individual pick items so combinations/2
+    # treats each (fixture, pick) pair as a candidate leg. A 3-leg parlay
+    # picks 3 of these, one per fixture (duplicates across fixtures are allowed
+    # since different matches are independent events).
     fixture_pick_pairs =
       Enum.flat_map(fixtures, fn f ->
         Enum.map(f.picks, fn p -> Map.merge(f, p) |> Map.delete(:picks) |> Map.delete(:min_odd) end)

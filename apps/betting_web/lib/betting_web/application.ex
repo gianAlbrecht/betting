@@ -1,5 +1,4 @@
 defmodule BettingWeb.Application do
-  @moduledoc "Phoenix web application."
   use Application
 
   @impl true

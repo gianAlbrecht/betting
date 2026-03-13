@@ -1,10 +1,4 @@
 defmodule BettingWeb do
-  @moduledoc """
-  Entry point for BettingWeb.
-
-  Defines helpers that are imported into controllers, views, channels, and so on.
-  """
-
   def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
 
   def router do

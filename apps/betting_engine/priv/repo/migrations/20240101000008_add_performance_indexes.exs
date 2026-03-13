@@ -2,17 +2,19 @@ defmodule BettingEngine.Repo.Migrations.AddPerformanceIndexes do
   use Ecto.Migration
 
   def change do
-    # Composite index for the most common odds query pattern:
-    # WHERE fixture_id = X AND market_name = 'h2h'
-    # Used by Arbitrage, ValueBets, and Parlay analysis on every render.
+    # All three analysis modules (Arbitrage, ValueBets, Parlay) query odds with
+    # WHERE fixture_id = X AND market_name = 'h2h' on every page load. Without
+    # this composite index that scan is sequential over the full odds table.
     create index(:odds, [:fixture_id, :market_name])
 
-    # Composite index for league-scoped upcoming fixtures queries.
+    # Speeds up the "upcoming fixtures for a league" query used by the sync
+    # pipeline when deciding which fixtures to update odds for.
     create index(:fixtures, [:league_id, :date])
 
-    # Partial index for the 6-hour cache check in OddsApi.Client.
-    # The query always filters WHERE status = 'success', so indexing only those rows
-    # avoids scanning error/stale rows and keeps the index small.
+    # Partial index covering only status = 'success' rows — the exact predicate
+    # used by the 6-hour cache check in OddsApi.Client. Indexing error rows too
+    # would double the index size for no benefit since they are never read by
+    # the cache check query.
     execute(
       """
       CREATE INDEX api_sync_logs_cache_check_idx
