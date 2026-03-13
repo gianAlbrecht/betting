@@ -1,36 +1,22 @@
 defmodule BettingEngine.Sync.Poller do
-  @moduledoc """
-  GenServer that triggers periodic odds syncs.
-
-  On startup (and then every `poll_interval_ms`), it starts a concurrent
-  sync of all configured leagues via LeaguePipeline.sync_leagues/1.
-
-  Tracks whether a sync is currently running to prevent overlap — if a
-  scheduled poll fires while a previous sync is still in progress, the poll
-  is skipped and the next interval is scheduled as normal.
-
-  A manual sync can be triggered at any time via `BettingEngine.Sync.Poller.sync_now/1`.
-  """
-
   use GenServer
 
   require Logger
 
-  alias BettingEngine.Sync.LeaguePipeline
+  import Ecto.Query
 
-  # ─── Public API ──────────────────────────────────────────
+  alias BettingEngine.Repo
+  alias BettingEngine.Schemas.Fixture
+  alias BettingEngine.Sync.{LeaguePipeline, ResultsSync}
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc "Trigger an immediate sync. Pass `force: true` to bypass cache."
   @spec sync_now(keyword()) :: :ok
   def sync_now(opts \\ []) do
     GenServer.cast(__MODULE__, {:sync_now, opts})
   end
-
-  # ─── Callbacks ───────────────────────────────────────────
 
   @impl GenServer
   def init(_opts) do
@@ -42,8 +28,10 @@ defmodule BettingEngine.Sync.Poller do
     leagues = Application.get_env(:betting_engine, :leagues, [])
     Logger.info("[Poller] #{length(leagues)} leagues configured")
 
-    Process.send_after(self(), :poll, 5_000)
-    Logger.info("[Poller] Started. First sync in 5 seconds.")
+    initial_delay = initial_sync_delay_ms()
+    Process.send_after(self(), :poll, initial_delay)
+    Process.send_after(self(), :results_sync, 60_000)
+    Logger.info("[Poller] Started. First odds sync in #{div(initial_delay, 1_000)}s, first results sync in 60s.")
     {:ok, %{syncing: false}}
   end
 
@@ -67,6 +55,20 @@ defmodule BettingEngine.Sync.Poller do
   end
 
   @impl GenServer
+  def handle_info(:results_sync, state) do
+    Task.Supervisor.start_child(BettingEngine.TaskSupervisor, fn ->
+      try do
+        ResultsSync.sync_results()
+      rescue
+        e -> Logger.error("[Poller] Results sync crashed: #{Exception.message(e)}")
+      end
+    end)
+
+    Process.send_after(self(), :results_sync, 2 * 60 * 60 * 1_000)
+    {:noreply, state}
+  end
+
+  @impl GenServer
   def handle_cast({:sync_now, opts}, state) do
     if state.syncing do
       Logger.warning("[Poller] sync_now called but a sync is already running — ignoring")
@@ -76,8 +78,6 @@ defmodule BettingEngine.Sync.Poller do
 
     {:noreply, %{state | syncing: true}}
   end
-
-  # ─── Private ─────────────────────────────────────────────
 
   defp do_sync(opts) do
     leagues = Application.get_env(:betting_engine, :leagues, [])
@@ -95,9 +95,6 @@ defmodule BettingEngine.Sync.Poller do
 
     caller = self()
 
-    # Run in background so the Poller GenServer stays responsive.
-    # The `after` block always fires — even on crash — so the Poller's
-    # `syncing` flag is reliably cleared regardless of outcome.
     Task.Supervisor.start_child(BettingEngine.TaskSupervisor, fn ->
       try do
         LeaguePipeline.sync_leagues(tagged)
@@ -116,6 +113,13 @@ defmodule BettingEngine.Sync.Poller do
         send(caller, :sync_task_done)
       end
     end)
+  end
+
+  defp initial_sync_delay_ms do
+    count = Repo.one(from(f in Fixture, select: count()))
+    if count == 0, do: 0, else: 5_000
+  rescue
+    _ -> 5_000
   end
 
   defp schedule_next_poll do

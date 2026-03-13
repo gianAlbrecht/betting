@@ -1,5 +1,3 @@
-# Seeds are run via: mix ecto.setup
-
 alias BettingEngine.Repo
 alias BettingEngine.Schemas.Sport
 

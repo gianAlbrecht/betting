@@ -1,16 +1,4 @@
 defmodule BettingEngine.Sync.SportsSync do
-  @moduledoc """
-  Upsert logic for events received from The Odds API.
-
-  `upsert_league_events/2` takes a league_config and a list of raw API event maps,
-  then upserts Sports, Leagues, Teams, Fixtures and Odds using Ecto's
-  `on_conflict: :replace_all` for idempotency.
-
-  All upserts for a single league batch run inside a single DB transaction
-  for consistency. Concurrent calls for different leagues are safe because
-  each league has distinct fixture IDs.
-  """
-
   require Logger
 
   alias BettingEngine.Repo
@@ -21,11 +9,9 @@ defmodule BettingEngine.Sync.SportsSync do
   @spec upsert_league_events(map(), [map()]) :: {:ok, upsert_stats()} | {:error, term()}
   def upsert_league_events(league_config, events) do
     Repo.transaction(fn ->
-      # Ensure Sport + League records exist (upsert)
       sport = upsert_sport!(league_config.sport_slug, league_config.sport_name)
       league = upsert_league!(sport.id, league_config.key, league_config.name)
 
-      # Tag the config with DB IDs so the OddsClient can log them
       stats = %{fixtures: 0, odds: 0}
 
       Enum.reduce(events, stats, fn event, acc ->
@@ -39,8 +25,6 @@ defmodule BettingEngine.Sync.SportsSync do
       end)
     end)
   end
-
-  # ─── Sport ───────────────────────────────────────────────
 
   defp upsert_sport!(slug, name) do
     now = DateTime.utc_now(:second)
@@ -59,8 +43,6 @@ defmodule BettingEngine.Sync.SportsSync do
     )
   end
 
-  # ─── League ──────────────────────────────────────────────
-
   defp upsert_league!(sport_id, api_league_id, name) do
     now = DateTime.utc_now(:second)
 
@@ -78,8 +60,6 @@ defmodule BettingEngine.Sync.SportsSync do
     )
   end
 
-  # ─── Team ────────────────────────────────────────────────
-
   defp upsert_team!(sport_id, team_name) do
     now = DateTime.utc_now(:second)
 
@@ -96,8 +76,6 @@ defmodule BettingEngine.Sync.SportsSync do
       returning: true
     )
   end
-
-  # ─── Fixture ─────────────────────────────────────────────
 
   defp upsert_fixture!(sport_id, league_id, home_team_id, away_team_id, event) do
     commence = parse_datetime!(event["commence_time"])
@@ -133,8 +111,6 @@ defmodule BettingEngine.Sync.SportsSync do
     )
   end
 
-  # ─── Odds ────────────────────────────────────────────────
-
   defp upsert_odds!(_fixture_id, nil), do: 0
 
   defp upsert_odds!(fixture_id, bookmakers) when is_list(bookmakers) do
@@ -166,8 +142,6 @@ defmodule BettingEngine.Sync.SportsSync do
 
     count
   end
-
-  # ─── Helpers ─────────────────────────────────────────────
 
   defp parse_datetime!(iso_string) do
     case DateTime.from_iso8601(iso_string) do

@@ -1,32 +1,49 @@
 defmodule BettingEngine.Application do
-  @moduledoc """
-  The BettingEngine OTP application.
-
-  Starts:
-    - BettingEngine.Repo (Ecto / PostgreSQL)
-    - BettingEngine.PubSub (Phoenix.PubSub)
-    - BettingEngine.TaskSupervisor (for fire-and-forget tasks)
-    - BettingEngine.Sync.Supervisor (OddsPoller + Broadway pipeline)
-  """
   use Application
+
+  require Logger
 
   @impl true
   def start(_type, _args) do
     children = [
-      # 1. Database connection pool
       BettingEngine.Repo,
 
-      # 2. PubSub — must start before any LiveView or broadcaster
       {Phoenix.PubSub, name: BettingEngine.PubSub},
 
-      # 3. Task.Supervisor for short-lived concurrent tasks
       {Task.Supervisor, name: BettingEngine.TaskSupervisor},
 
-      # 4. Sync subsystem: Broadway pipeline + periodic poller
       BettingEngine.Sync.Supervisor
     ]
 
     opts = [strategy: :one_for_one, name: BettingEngine.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    with {:ok, pid} <- Supervisor.start_link(children, opts) do
+      maybe_migrate()
+      {:ok, pid}
+    end
+  end
+
+  defp maybe_migrate do
+    if Application.get_env(:betting_engine, :auto_migrate, true) do
+      migrate()
+    end
+  end
+
+  defp migrate do
+    path = Application.app_dir(:betting_engine, "priv/repo/migrations")
+
+    Ecto.Migrator.with_repo(BettingEngine.Repo, fn repo ->
+      Ecto.Migrator.run(repo, path, :up, all: true)
+    end)
+    |> case do
+      {:ok, migrations, _} when migrations != [] ->
+        Logger.info("[App] Ran #{length(migrations)} migration(s)")
+
+      {:ok, [], _} ->
+        Logger.debug("[App] Migrations: already up to date")
+
+      {:error, reason} ->
+        Logger.error("[App] Migration failed: #{inspect(reason)}")
+    end
   end
 end

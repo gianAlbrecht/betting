@@ -21,3 +21,5 @@ config :betting_engine, :sync,
   poll_interval_ms: :infinity,
   delay_between_calls_ms: 0,
   monthly_request_limit: 500
+
+config :betting_engine, :auto_migrate, false

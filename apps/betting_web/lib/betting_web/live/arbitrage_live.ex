@@ -11,20 +11,21 @@ defmodule BettingWeb.ArbitrageLive do
       Phoenix.PubSub.subscribe(BettingEngine.PubSub, "sync:status")
     end
 
-    opportunities = Arbitrage.find_opportunities()
+    opportunities = sorted(Arbitrage.find_opportunities(), true)
 
     {:ok,
      assign(socket,
        opportunities: opportunities,
        count: length(opportunities),
        budgets: %{},
-       saved: MapSet.new()
+       saved: MapSet.new(),
+       sort_desc: true
      )}
   end
 
   @impl true
   def handle_info({:sync_complete, _}, socket) do
-    opportunities = Arbitrage.find_opportunities()
+    opportunities = sorted(Arbitrage.find_opportunities(), socket.assigns.sort_desc)
     {:noreply, assign(socket, opportunities: opportunities, count: length(opportunities))}
   end
 
@@ -35,10 +36,18 @@ defmodule BettingWeb.ArbitrageLive do
   def handle_info({:sync_error, _}, socket), do: {:noreply, socket}
 
   @impl true
+  def handle_event("toggle_sort", _, socket) do
+    sort_desc = !socket.assigns.sort_desc
+    opportunities = sorted(socket.assigns.opportunities, sort_desc)
+    {:noreply, assign(socket, sort_desc: sort_desc, opportunities: opportunities)}
+  end
+
+  @impl true
   def handle_event("update_budget", %{"fixture_id" => fid, "budget" => budget_str}, socket) do
     case Float.parse(budget_str) do
       {v, _} when v > 0 ->
         {:noreply, assign(socket, budgets: Map.put(socket.assigns.budgets, fid, v))}
+
       _ ->
         {:noreply, socket}
     end
@@ -83,17 +92,35 @@ defmodule BettingWeb.ArbitrageLive do
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Arbitrage / Surebet Finder</h1>
         <p class="mt-1 text-sm text-muted-foreground">
-          Finde garantierte Gewinne durch Quoten-Differenzen zwischen Buchmachern — rein aus der lokalen Datenbank, ohne API-Calls.
+          Finde garantierte Gewinne durch Quoten-Differenzen zwischen Buchmachern.
         </p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <%= if @count > 0 do %>
-          <.badge variant="success"><%= @count %> Surebet<%= if @count != 1, do: "s" %> gefunden</.badge>
-          <span>·</span>
-          <span>Bester Profit: <span class="font-bold text-green-500">+<%= hd(@opportunities).profit_percent %>%</span></span>
-        <% else %>
-          <span>Keine Surebets gefunden</span>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <%= if @count > 0 do %>
+            <.badge variant="success"><%= @count %> Surebet<%= if @count != 1, do: "s" %> gefunden</.badge>
+            <span>·</span>
+            <span>Bester Profit: <span class="font-bold text-green-500">+<%= hd(@opportunities).profit_percent %>%</span></span>
+          <% else %>
+            <span>Keine Surebets gefunden</span>
+          <% end %>
+        </div>
+
+        <%= if @count > 1 do %>
+          <button
+            phx-click="toggle_sort"
+            class="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <%= if @sort_desc do %>
+                <path d="M3 4h13"/><path d="M3 8h9"/><path d="M3 12h5"/><path d="m15 8 3 3 3-3"/><path d="M18 11V21"/>
+              <% else %>
+                <path d="M3 4h13"/><path d="M3 8h9"/><path d="M3 12h5"/><path d="m15 16 3-3 3 3"/><path d="M18 13V3"/>
+              <% end %>
+            </svg>
+            Profit: <%= if @sort_desc, do: "Höchster zuerst", else: "Niedrigster zuerst" %>
+          </button>
         <% end %>
       </div>
 
@@ -103,7 +130,7 @@ defmodule BettingWeb.ArbitrageLive do
           <p>
             <span class="font-semibold text-foreground">Surebets</span> entstehen, wenn verschiedene Buchmacher so unterschiedliche Quoten anbieten, dass du mit den richtigen Einsätzen bei <span class="font-semibold text-foreground">jedem Spielausgang</span> Gewinn machst.
           </p>
-          <p>Es werden ausschliesslich bereits synchronisierte Quoten aus der lokalen Datenbank ausgewertet — keine neuen API-Calls.</p>
+          <p>Es werden ausschliesslich bereits synchronisierte Quoten aus der lokalen Datenbank ausgewertet.</p>
         </div>
       </div>
 
@@ -154,22 +181,25 @@ defmodule BettingWeb.ArbitrageLive do
       </.card_header>
 
       <.card_content class="space-y-4">
+        <%!-- Budget input — wrapped in a form so fixture_id travels as a hidden field,
+              avoiding the phx-value-* on input pattern that caused JS errors. --%>
         <div class="flex items-center gap-3">
           <label class="shrink-0 text-sm font-medium">Gesamt-Einsatz</label>
-          <div class="relative max-w-[160px]">
-            <.ui_input
-              type="number"
-              min="1"
-              step="10"
-              value={@budget}
-              phx-change="update_budget"
-              phx-value-fixture_id={@arb.fixture_id}
-              name="budget"
-              phx-debounce="300"
-              class="pr-8 tabular-nums"
-            />
-            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
-          </div>
+          <form phx-change="update_budget" class="max-w-[160px]">
+            <input type="hidden" name="fixture_id" value={@arb.fixture_id} />
+            <div class="relative">
+              <.ui_input
+                type="number"
+                min="1"
+                step="10"
+                value={@budget}
+                name="budget"
+                phx-debounce="300"
+                class="pr-8 tabular-nums"
+              />
+              <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
+            </div>
+          </form>
         </div>
 
         <.separator />
@@ -249,6 +279,9 @@ defmodule BettingWeb.ArbitrageLive do
     """
   end
 
+  defp sorted(opportunities, true), do: Enum.sort_by(opportunities, & &1.profit_percent, :desc)
+  defp sorted(opportunities, false), do: Enum.sort_by(opportunities, & &1.profit_percent, :asc)
+
   defp calculate_stakes(budget, arb_margin, outcomes) do
     home_stake = budget * (1 / outcomes.home.best_odd / arb_margin)
     draw_stake = if outcomes.draw, do: budget * (1 / outcomes.draw.best_odd / arb_margin), else: 0.0
@@ -256,12 +289,6 @@ defmodule BettingWeb.ArbitrageLive do
     payout = budget / arb_margin
     profit = payout - budget
 
-    %{
-      home: home_stake,
-      draw: draw_stake,
-      away: away_stake,
-      payout: payout,
-      profit: profit
-    }
+    %{home: home_stake, draw: draw_stake, away: away_stake, payout: payout, profit: profit}
   end
 end

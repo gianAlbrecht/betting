@@ -1,11 +1,4 @@
 defmodule BettingEngine.Sync.Supervisor do
-  @moduledoc """
-  Supervisor for the sync subsystem.
-
-  Children:
-    - Poller: GenServer that triggers periodic and manual syncs
-  """
-
   use Supervisor
 
   def start_link(init_arg) do

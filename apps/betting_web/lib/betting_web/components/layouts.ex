@@ -11,10 +11,11 @@ defmodule BettingWeb.Layouts do
     ~H"""
     <.link
       href={@href}
-      class="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+      title={@label}
+      class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
     >
       <.nav_icon name={@icon} />
-      <%= @label %>
+      <span class="nav-label truncate"><%= @label %></span>
     </.link>
     """
   end

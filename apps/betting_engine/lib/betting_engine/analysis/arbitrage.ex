@@ -1,15 +1,4 @@
 defmodule BettingEngine.Analysis.Arbitrage do
-  @moduledoc """
-  Detects surebet (arbitrage) opportunities across bookmakers.
-
-  An arbitrage opportunity exists when the sum of inverse odds for all outcomes
-  is less than 1 (arb_margin < 1.0), guaranteeing profit regardless of result.
-
-  profit_percent = (1 - arb_margin) * 100
-
-  Only upcoming fixtures with h2h odds from at least 2 bookmakers are considered.
-  """
-
   alias BettingEngine.Repo
   alias BettingEngine.Schemas.Fixture
   import Ecto.Query
@@ -42,8 +31,6 @@ defmodule BettingEngine.Analysis.Arbitrage do
     fixtures = load_upcoming_fixtures_with_odds()
     Enum.flat_map(fixtures, &check_fixture/1)
   end
-
-  # ─── Private ─────────────────────────────────────────────
 
   defp load_upcoming_fixtures_with_odds do
     now = DateTime.utc_now()

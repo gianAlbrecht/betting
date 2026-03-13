@@ -1,17 +1,4 @@
 defmodule BettingEngine.Analysis.Parlay do
-  @moduledoc """
-  Generates optimal parlay combinations from upcoming fixtures.
-
-  Params: legs, min_total_odds, max_total_odds, max_single_odd
-  Ranks by implied probability descending. Caps at 10k combinations checked.
-
-  Risk levels (based on implied probability):
-    - low:      > 55%
-    - moderate: > 30%
-    - high:     > 10%
-    - extreme:  ≤ 10%
-  """
-
   alias BettingEngine.Repo
   alias BettingEngine.Schemas.Fixture
   import Ecto.Query
@@ -66,8 +53,6 @@ defmodule BettingEngine.Analysis.Parlay do
       |> Enum.take(@max_results)
     end
   end
-
-  # ─── Private ─────────────────────────────────────────────
 
   defp load_fixtures_with_best_odds(max_single_odd) do
     now = DateTime.utc_now()

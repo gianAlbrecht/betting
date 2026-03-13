@@ -1,31 +1,16 @@
 defmodule BettingEngine.Sync.LeaguePipeline do
-  @moduledoc """
-  Concurrent odds fetcher using Task.Supervisor.
-
-  Fetches up to `@concurrency` leagues in parallel, upserts results, and
-  broadcasts changes via PubSub. Uses `async_stream_nolink` so a single
-  league's timeout or API error never crashes the entire pipeline.
-
-  Called directly by OddsPoller — no GenStage producer needed.
-  """
-
   require Logger
 
   alias BettingEngine.Sync.SportsSync
   alias BettingEngine.OddsApi.Client, as: OddsClient
 
   @concurrency 3
-  # Per-task HTTP + DB timeout. Must exceed OddsClient's 30s receive_timeout.
   @task_timeout_ms 40_000
 
-  @doc """
-  Fetch and upsert odds for the given league configs concurrently.
-  Returns :ok when all tasks complete (success or failure).
-  """
   def sync_leagues(league_configs) do
-    league_configs
+    BettingEngine.TaskSupervisor
     |> Task.Supervisor.async_stream_nolink(
-      BettingEngine.TaskSupervisor,
+      league_configs,
       &fetch_and_upsert/1,
       max_concurrency: @concurrency,
       timeout: @task_timeout_ms,
@@ -36,9 +21,7 @@ defmodule BettingEngine.Sync.LeaguePipeline do
         :ok
 
       {:exit, reason} ->
-        Logger.error("[LeaguePipeline] Task exited unexpectedly",
-          reason: inspect(reason)
-        )
+        Logger.error("[LeaguePipeline] Task exited unexpectedly: #{inspect(reason)}")
     end)
     |> Stream.run()
 
@@ -93,7 +76,6 @@ defmodule BettingEngine.Sync.LeaguePipeline do
     end
   end
 
-  # Honour the configured inter-call delay to avoid hammering the API.
   defp maybe_delay do
     delay = Application.get_env(:betting_engine, :sync, [])[:delay_between_calls_ms] || 0
 

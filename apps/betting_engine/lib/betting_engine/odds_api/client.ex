@@ -1,15 +1,4 @@
 defmodule BettingEngine.OddsApi.Client do
-  @moduledoc """
-  HTTP client for The Odds API (api.the-odds-api.com/v4).
-
-  Uses `Req` (built on Finch) for connection pooling.
-  All responses include rate-limit headers which are tracked and stored.
-
-  Rate-limit protection: before each live request, checks ApiSyncLog for a
-  recent successful sync. If one exists within the TTL, returns `{:cached, count}`
-  instead of hitting the API.
-  """
-
   require Logger
 
   alias BettingEngine.Repo
@@ -36,8 +25,6 @@ defmodule BettingEngine.OddsApi.Client do
       do_request(endpoint, cache_key, league_config, opts)
     end
   end
-
-  # ─── Private ─────────────────────────────────────────────
 
   defp maybe_check_cache(_cache_key, true), do: :ok
 
@@ -170,8 +157,6 @@ defmodule BettingEngine.OddsApi.Client do
       {:error, err} -> Logger.warning("Failed to write sync log: #{inspect(err)}")
     end
   end
-
-  # ─── Stats helpers (used by LiveView dashboard) ───────────
 
   @spec monthly_requests_used() :: non_neg_integer()
   def monthly_requests_used do
