@@ -1,4 +1,25 @@
 defmodule BettingEngine.Sync.LeaguePipeline do
+  @moduledoc """
+  Fetches and persists odds for multiple leagues concurrently.
+
+  Called by Poller with a list of league configs. Runs up to @concurrency (3)
+  HTTP fetches in parallel via Task.Supervisor.async_stream_nolink. The nolink
+  variant is important: a crashed or timed-out task does not take down the
+  pipeline — the error is logged and all other leagues continue unaffected.
+
+  Flow per league:
+    1. Optional throttle delay (delay_between_calls_ms config) to stay within
+       API rate limits when many leagues are synced in quick succession.
+    2. OddsApi.Client.fetch_odds/2 → hits The Odds API or returns {:cached, n}
+       if a successful sync already exists within the last 6 hours.
+    3. SportsSync.upsert_league_events/2 → writes fixtures + odds to the DB.
+    4. PubSub broadcast on "odds:updated" so analysis LiveViews can refresh.
+
+  After all leagues finish (or fail), a single {:sync_complete, %{}} is
+  broadcast on "sync:status". Poller uses this to clear its syncing flag and
+  the dashboard uses it to reload stats exactly once per sync cycle.
+  """
+
   require Logger
 
   alias BettingEngine.Sync.SportsSync

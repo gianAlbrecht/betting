@@ -147,7 +147,8 @@ defmodule BettingWeb.PortfolioLive do
     """
   end
 
-  # ─── Components ──────────────────────────────────────────
+  # bet_row renders a compact summary line with an expandable stats panel.
+  # The expanded state is tracked as a MapSet of bet IDs in the socket assigns.
 
   attr :bet, :map, required: true
   attr :expanded, :boolean, default: false
@@ -286,7 +287,7 @@ defmodule BettingWeb.PortfolioLive do
     """
   end
 
-  # ─── Helpers ─────────────────────────────────────────────
+  # Display helpers — no business logic, only formatting and CSS class selection.
 
   defp type_emoji("Value"), do: "💎"
   defp type_emoji("Surebet"), do: "⚖️"
@@ -309,7 +310,8 @@ defmodule BettingWeb.PortfolioLive do
   defp format_money(val) when is_float(val), do: :erlang.float_to_binary(val, decimals: 2)
   defp format_money(val), do: to_string(val)
 
-  # ─── Data loading ─────────────────────────────────────────
+  # Loads all saved bets with their fixture associations and computes aggregate
+  # stats in one pass. Returns a map with :bets (list of view maps) and :stats.
 
   defp load_portfolio do
     bets =
@@ -336,7 +338,8 @@ defmodule BettingWeb.PortfolioLive do
           league_name: b.fixture.league.name,
           match_date: b.fixture.date,
           sport_slug: b.fixture.sport.slug,
-          # Match result fields (populated by ResultsSync via API-Sports)
+          # Score fields are nil until ResultsSync fetches results from API-Sports
+          # after kickoff. nil home_score means the match is not yet settled.
           home_score: b.fixture.home_score,
           away_score: b.fixture.away_score,
           fixture_status: b.fixture.status,
@@ -366,7 +369,9 @@ defmodule BettingWeb.PortfolioLive do
     }
   end
 
-  # ─── Settlement ───────────────────────────────────────────
+  # Called automatically whenever ResultsSync broadcasts new scores.
+  # Iterates open bets and resolves them against the fixture result.
+  # Surebets are always Won (by definition, all outcomes are covered).
 
   defp settle_finished_bets do
     now = DateTime.utc_now()
@@ -401,9 +406,12 @@ defmodule BettingWeb.PortfolioLive do
     }
   end
 
+  # Surebets are always Won — by construction, all outcomes were backed so at
+  # least one leg always wins. We don't try to match the specific outcome label.
   defp determine_status(%{type: "Surebet"}, _fix), do: "Won"
 
   defp determine_status(bet, fix) do
+    # Can't settle without a score — this bet will be re-checked next cycle.
     if fix.home_score == nil or fix.away_score == nil do
       nil
     else

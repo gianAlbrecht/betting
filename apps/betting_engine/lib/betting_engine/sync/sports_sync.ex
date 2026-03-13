@@ -1,4 +1,27 @@
 defmodule BettingEngine.Sync.SportsSync do
+  @moduledoc """
+  Upserts a full batch of league events (fixtures + odds) into the database.
+
+  Called by LeaguePipeline after each successful API response. Every call runs
+  inside a single Repo.transaction/1 so a partial failure (e.g. one bad odds
+  row) rolls back the entire league batch rather than leaving the DB in a mixed
+  state.
+
+  Upsert strategy (conflict_target + on_conflict: [set: ...]):
+    - Safe to re-run on repeated syncs — stale data is overwritten, no
+      duplicate rows accumulate.
+    - conflict_target is always a business-key (e.g. api_fixture_id + sport_id),
+      never the auto-increment primary key.
+
+  Data hierarchy written per call:
+    Sport → League → Team (×2 per fixture) → Fixture → Odds
+
+  Team identity note: The Odds API has no numeric team IDs in the h2h endpoint.
+  We use the team name as api_team_id, so team deduplication is by (name, sport_id).
+  Name changes at the API level would create duplicate rows — acceptable given
+  the read-heavy, near-real-time nature of this system.
+  """
+
   require Logger
 
   alias BettingEngine.Repo
@@ -80,6 +103,10 @@ defmodule BettingEngine.Sync.SportsSync do
   defp upsert_fixture!(sport_id, league_id, home_team_id, away_team_id, event) do
     commence = parse_datetime!(event["commence_time"])
     now = DateTime.utc_now(:second)
+
+    # The Odds API does not return live status — derive a best-guess from kickoff
+    # time. ResultsSync will overwrite this with the actual status from API-Sports
+    # once the match has finished.
     status = if DateTime.compare(commence, now) == :gt, do: "Not Started", else: "In Play"
     status_short = if status == "Not Started", do: "NS", else: "LIVE"
 

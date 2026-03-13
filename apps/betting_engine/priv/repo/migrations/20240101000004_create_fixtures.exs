@@ -17,7 +17,8 @@ defmodule BettingEngine.Repo.Migrations.CreateFixtures do
       add :home_score, :integer
       add :away_score, :integer
       add :elapsed, :integer
-      # JSONB for sport-specific data (period scores, shootout results, etc.)
+      # JSONB — stores sport-specific extras like period scores and shootout
+      # results without requiring a schema migration for every new data point.
       add :sport_specific_data, :map
 
       timestamps(type: :utc_datetime)

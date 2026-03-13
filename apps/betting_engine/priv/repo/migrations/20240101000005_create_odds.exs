@@ -10,7 +10,9 @@ defmodule BettingEngine.Repo.Migrations.CreateOdds do
       add :value, :float, null: false
       add :implied_probability, :float
 
-      # cached_at tracks when this odd was last fetched from the API
+      # cached_at records when this row was last refreshed from The Odds API.
+      # Used alongside ApiSyncLog to determine whether the 6-hour cache is still
+      # valid without querying the odds table itself.
       add :cached_at, :utc_datetime
       add :updated_at, :utc_datetime
     end
@@ -18,7 +20,7 @@ defmodule BettingEngine.Repo.Migrations.CreateOdds do
     create unique_index(:odds, [:fixture_id, :bookmaker_name, :market_name, :label])
     create index(:odds, [:fixture_id])
     create index(:odds, [:market_name])
-    # GIN index for fast filtering on value ranges
+    # Index on value for range scans (e.g. max_single_odd filter in Parlay).
     create index(:odds, [:value])
   end
 end

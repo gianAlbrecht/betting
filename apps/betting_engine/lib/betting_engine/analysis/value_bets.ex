@@ -1,4 +1,23 @@
 defmodule BettingEngine.Analysis.ValueBets do
+  @moduledoc """
+  Finds value bets by comparing bookmaker odds against a de-vigged consensus
+  probability derived from the broader market.
+
+  Algorithm per outcome label (e.g. "Arsenal", "Draw", "Chelsea"):
+    1. Collect all h2h odds for that label across every bookmaker in the DB.
+    2. Average their raw implied probabilities (1/odd). This strips the
+       bookmaker margin (vig) via simple averaging — the market consensus.
+    3. Calculate edge: edge = consensus_probability × best_available_odd − 1
+    4. Surface outcomes where edge ≥ @min_value_threshold (5%).
+
+  Why require @min_bookmakers (2)?
+  A single bookmaker's odds cannot be verified against a consensus — you need
+  at least two independent quotes to compute a meaningful average. Fixtures
+  with only one bookmaker quoting an outcome are silently skipped.
+
+  This module is a pure read-only function; it never writes to the database.
+  """
+
   alias BettingEngine.Repo
   alias BettingEngine.Schemas.Fixture
   import Ecto.Query
@@ -76,6 +95,9 @@ defmodule BettingEngine.Analysis.ValueBets do
   end
 
   defp find_value_for_outcome(label, odds) do
+    # Compute the implied probability for each bookmaker's quote (1/odd),
+    # then average them. This is the de-vigged consensus probability — the
+    # market's best estimate of the true chance of this outcome occurring.
     raw_probabilities = Enum.map(odds, fn o -> 1 / o.value end)
     total_implied = Enum.sum(raw_probabilities)
 

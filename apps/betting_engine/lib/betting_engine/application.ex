@@ -1,4 +1,20 @@
 defmodule BettingEngine.Application do
+  @moduledoc """
+  OTP Application entry point for the betting_engine umbrella child.
+
+  Starts the supervision tree in dependency order:
+    1. Repo           — Ecto/PostgreSQL connection pool
+    2. PubSub         — Phoenix PubSub hub shared by all LiveViews and sync modules
+    3. TaskSupervisor — Dynamic task pool for concurrent HTTP fetches (LeaguePipeline)
+                        and heavy background work (parlay generation, results sync)
+    4. Sync.Supervisor — Contains the Poller GenServer that drives periodic syncs
+
+  After the supervisor tree is up, runs all pending Ecto migrations automatically.
+  This means Docker containers and fresh deployments need no manual migration step.
+  Disabled in the test environment via the :auto_migrate config key to avoid
+  interfering with the test DB setup.
+  """
+
   use Application
 
   require Logger

@@ -24,8 +24,9 @@ defmodule BettingWeb.DashboardLive do
 
   @impl true
   def handle_info({:odds_updated, _payload}, socket) do
-    # Intentionally skip full stats reload here — odds_updated fires once per league
-    # (up to 12x per sync cycle). Stats are refreshed once on sync_complete instead.
+    # odds_updated fires once per league as each finishes — up to 12 times per
+    # sync cycle. Reloading stats here would trigger 12 heavy DB queries per
+    # sync. We ignore it and reload only on :sync_complete (once per full cycle).
     {:noreply, socket}
   end
 

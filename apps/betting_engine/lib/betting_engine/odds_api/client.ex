@@ -1,4 +1,26 @@
 defmodule BettingEngine.OddsApi.Client do
+  @moduledoc """
+  HTTP client for The Odds API (https://api.the-odds-api.com/v4).
+
+  Fetches h2h (head-to-head / 1X2) EU odds for a configured league and writes
+  an ApiSyncLog entry after every attempt — success or failure. The log serves
+  two purposes:
+    1. Audit trail — the Sync Protocol panel on the dashboard reads recent logs.
+    2. 6-hour cache — before hitting the API, we check whether a successful sync
+       for the same endpoint already exists within the last @cache_ttl_hours. If
+       so, {:cached, count} is returned and no API request is made. Pass
+       `force: true` to skip this check (exposed via the dashboard Force Sync button).
+
+  Rate budget awareness:
+    Free tier: 500 requests/month. A full sync of 12 leagues costs 12 requests.
+    The 6-hour cache means at most 4 full syncs/day = 48 requests/day maximum
+    if the poller runs continuously — well within the monthly budget.
+
+  Two public helpers for the dashboard:
+    monthly_requests_used/0 — counts successful logs since the 1st of the month
+    recent_sync_logs/1      — last N entries for the sync protocol table
+  """
+
   require Logger
 
   alias BettingEngine.Repo
@@ -19,6 +41,10 @@ defmodule BettingEngine.OddsApi.Client do
     force = Keyword.get(opts, :force, false)
     sport_key = league_config.key
     endpoint = "/sports/#{sport_key}/odds/"
+
+    # The cache key includes query params so different markets/regions would
+    # each get their own cache entry. Currently we only sync h2h eu, so this
+    # is consistent with what do_request actually sends.
     cache_key = "#{endpoint}?regions=eu&markets=h2h"
 
     with :ok <- maybe_check_cache(cache_key, force) do
@@ -111,6 +137,9 @@ defmodule BettingEngine.OddsApi.Client do
   end
 
   defp parse_rate_limit(headers) do
+    # The Odds API returns remaining + used as response headers. We reconstruct
+    # the total limit from them so the dashboard can display "X of 500 used".
+    # Returns nil if headers are absent (e.g. in test stubs or network errors).
     with remaining when not is_nil(remaining) <- get_header(headers, "x-requests-remaining"),
          used when not is_nil(used) <- get_header(headers, "x-requests-used"),
          {remaining_int, _} <- Integer.parse(remaining),

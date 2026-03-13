@@ -6,7 +6,8 @@ defmodule BettingEngine.Repo.Migrations.CreateApiSyncLogs do
       add :endpoint, :string, null: false
       add :sport_id, :integer
       add :league_id, :integer
-      # JSONB for request params (flexible auditing)
+      # JSONB — stores the request params (sport key, league key, etc.) so each
+      # log entry is self-contained and can be replayed for debugging.
       add :params, :map
       add :status, :string, null: false
       add :record_count, :integer

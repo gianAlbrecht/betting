@@ -1,4 +1,28 @@
 defmodule BettingEngine.SportsApi.Client do
+  @moduledoc """
+  HTTP client for api-sports.io — fetches finished match results only.
+
+  The Odds API provides future odds but never historical scores. This client
+  fills that gap: ResultsSync calls fetch_results/2 after kickoff to write
+  home_score/away_score back to the Fixture table, which enables automatic
+  bet settlement in PortfolioLive.
+
+  Two separate base URLs because api-sports uses different subdomains per sport:
+    Football/soccer: v3.football.api-sports.io  (endpoint: /fixtures)
+    Ice hockey:      v1.hockey.api-sports.io    (endpoint: /games)
+
+  The response shapes also differ between sports — parse_result/2 normalises
+  both into the same game_result struct so ResultsSync is sport-agnostic.
+
+  When API_SPORTS_KEY is not configured, every call returns {:disabled, reason}
+  so the rest of the system (odds sync, analysis, UI) keeps working normally.
+
+  Season logic:
+    Football seasons span two calendar years (2024/25). The season key is the
+    year the season *started*, which flips in August (month >= 8 → current year).
+    Hockey follows the same convention but flips in September.
+  """
+
   require Logger
 
   @football_base "https://v3.football.api-sports.io"
@@ -36,6 +60,8 @@ defmodule BettingEngine.SportsApi.Client do
     headers = [{"x-apisports-key", api_key}]
 
     case Req.get(url, params: params, headers: headers, receive_timeout: 15_000) do
+      # api-sports wraps application-level errors in an "errors" object on
+      # an otherwise 200 response (e.g. invalid league ID, bad date format).
       {:ok, %{status: 200, body: %{"errors" => errors}}} when map_size(errors) > 0 ->
         msg = errors |> Map.values() |> Enum.join("; ")
         Logger.warning("[SportsApi] API error for #{league_config.name}: #{msg}")

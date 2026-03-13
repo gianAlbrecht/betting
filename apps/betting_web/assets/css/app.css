@@ -76,6 +76,24 @@
   }
 }
 
+/*
+ * Sidebar
+ *
+ * Two modes depending on viewport:
+ *
+ * Mobile (< 1024px): fixed overlay drawer that starts off-screen and slides in
+ *   when JS adds .mobile-open. The backdrop covers the rest of the screen and
+ *   closes the drawer on tap. Body scroll is locked while the drawer is open.
+ *
+ * Desktop (≥ 1024px): in-flow sidebar that collapses to icon-only mode.
+ *   Full = 15rem, collapsed = 3.5rem (just wide enough for one icon).
+ *   The .collapsed class is toggled by JS and persisted in localStorage so
+ *   the user's preference survives page loads. .nav-label elements (text spans,
+ *   section heading, footer) hide when collapsed; icons centre themselves.
+ *
+ * JS entry points in assets/js/app.js: sidebarToggle, sidebarOpen, sidebarClose.
+ */
+
 #sidebar {
   flex-shrink: 0;
   display: flex;
@@ -83,6 +101,7 @@
   transition: width 220ms ease, transform 220ms ease;
 }
 
+/* Mobile: fixed overlay, starts off-screen to the left */
 @media (max-width: 1023px) {
   #sidebar {
     position: fixed;
@@ -98,6 +117,7 @@
   }
 }
 
+/* Desktop: in-flow, collapsible to icon-only */
 @media (min-width: 1024px) {
   #sidebar {
     position: static;
@@ -108,21 +128,25 @@
     width: 3.5rem;
   }
 
+  /* Hide all text labels so only the icon SVGs remain */
   #sidebar.collapsed .nav-label {
     display: none;
   }
 
+  /* Centre the icon within the now-narrower link button */
   #sidebar.collapsed nav a {
     justify-content: center;
     padding-left: 0;
     padding-right: 0;
   }
 
+  /* Flip the chevron arrow to signal "click to expand" */
   #sidebar.collapsed #sidebar-chevron {
     transform: rotate(180deg);
   }
 }
 
+/* Applied by JS initSidebar() to the link whose pathname matches the current URL */
 nav a.nav-active {
   background-color: var(--sidebar-accent);
   color: var(--sidebar-accent-foreground);

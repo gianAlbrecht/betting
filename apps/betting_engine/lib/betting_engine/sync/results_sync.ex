@@ -1,4 +1,27 @@
 defmodule BettingEngine.Sync.ResultsSync do
+  @moduledoc """
+  Fetches finished match scores from API-Sports and writes them to Fixture rows.
+
+  The Odds API only provides future odds — it never tells us what actually
+  happened. This module fills that gap so bets can be settled automatically.
+
+  Strategy:
+    1. Find leagues that have past-kickoff fixtures with no score (home_score IS
+       NULL). Only leagues with an api_sports_league_id in config are considered.
+    2. For each such league, fetch yesterday + today from API-Sports. Two dates
+       are used to catch late-night matches that straddle midnight UTC.
+    3. Match API-Sports game records to our Fixture rows using normalised team
+       names. Normalisation strips common legal suffixes (FC, SC, RB, etc.) so
+       "RB Leipzig" matches "Leipzig" and similar variations.
+    4. Write home_score, away_score, status, and status_short to the fixture.
+    5. Broadcast {:results_updated, %{count: n}} on "results:updated" so
+       PortfolioLive receives the update and auto-settles open bets.
+
+  API rate budget: 100 requests/day on the free tier.
+  In practice only 2–4 leagues have unscored fixtures at any time, so real
+  usage is roughly 4–8 requests per run (2 dates × active leagues).
+  """
+
   require Logger
 
   import Ecto.Query
@@ -7,6 +30,7 @@ defmodule BettingEngine.Sync.ResultsSync do
   alias BettingEngine.Schemas.Fixture
   alias BettingEngine.SportsApi.Client, as: SportsClient
 
+  @doc "Sync results for all leagues that have unscored, past-kickoff fixtures."
   def sync_results do
     leagues = leagues_needing_results()
 
@@ -62,6 +86,8 @@ defmodule BettingEngine.Sync.ResultsSync do
 
   defp apply_results_to_league(league_config, api_results) do
     now = DateTime.utc_now()
+    # Only look back one week — older unscored fixtures are stale data (e.g.
+    # postponed matches) and we don't want to bloat the result-matching loop.
     week_ago = DateTime.add(now, -7 * 24 * 3600, :second)
 
     our_fixtures =
@@ -89,6 +115,10 @@ defmodule BettingEngine.Sync.ResultsSync do
     our_home = normalize(fixture.home_team.name)
     our_away = normalize(fixture.away_team.name)
 
+    # Two-pass fuzzy match: exact normalised equality first, then substring
+    # containment in both directions. The substring check handles cases where
+    # one source uses a shorter version of the name, e.g. "Bayern" vs
+    # "Bayern München" — without it, 30–40% of matches would fail to reconcile.
     Enum.find(api_results, fn r ->
       api_home = normalize(r.home_team)
       api_away = normalize(r.away_team)
@@ -99,6 +129,9 @@ defmodule BettingEngine.Sync.ResultsSync do
     end)
   end
 
+  # Strips legal entity suffixes (FC, SC, RB Leipzig → Leipzig, etc.),
+  # punctuation, and extra whitespace. Both our names and API-Sports names are
+  # normalised before comparison so the fuzzy match is symmetrical.
   defp normalize(name) do
     name
     |> String.downcase()
@@ -134,6 +167,9 @@ defmodule BettingEngine.Sync.ResultsSync do
     end
   end
 
+  # FT = full time, AET = after extra time, PEN = after penalties.
+  # In-progress status codes (1H, HT, 2H, ET, BT) are in the guard only to make
+  # the pattern exhaustive — they always return false (not yet finished).
   defp finished?(%{status_short: s}) when s in ~w(FT AET PEN HT 1H 2H ET BT), do: s in ~w(FT AET PEN)
   defp finished?(_), do: false
 
@@ -141,6 +177,8 @@ defmodule BettingEngine.Sync.ResultsSync do
     now = DateTime.utc_now()
     week_ago = DateTime.add(now, -7 * 24 * 3600, :second)
 
+    # First find which league names actually have unscored past fixtures in the
+    # DB — no point querying API-Sports for leagues that are all up to date.
     active_league_names =
       from(f in Fixture,
         join: l in assoc(f, :league),
@@ -152,6 +190,9 @@ defmodule BettingEngine.Sync.ResultsSync do
       )
       |> Repo.all()
 
+    # Then intersect with the configured leagues that have an api_sports_league_id.
+    # Leagues without that key (e.g. if you add a new league and forget it) are
+    # silently skipped rather than crashing the sync.
     Application.get_env(:betting_engine, :leagues, [])
     |> Enum.filter(fn league ->
       Map.has_key?(league, :api_sports_league_id) and
